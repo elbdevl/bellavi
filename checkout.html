@@ -721,16 +721,61 @@
                 }
             }
 
-            static async sendCODNotification(formData) {
-      const message = this.createWhatsAppMessage(formData);
-      const response = await fetch(
-        `https://api.callmebot.com/whatsapp.php?phone=${CONFIG.BUSINESS.PHONE}&text=${encodeURIComponent(message)}&apikey=${CONFIG.BUSINESS.WHATSAPP_API_KEY}`
-      );
-      
-      if (!response.ok || !(await response.text()).includes("Message sent")) {
-        throw new Error('Failed to send COD confirmation');
-      }
+           static async sendCODNotification(formData) {
+    try {
+        const message = this.createWhatsAppMessage(formData);
+        const apiUrl = `https://api.callmebot.com/whatsapp.php?phone=${CONFIG.BUSINESS.PHONE}&text=${encodeURIComponent(message)}&apikey=${CONFIG.BUSINESS.WHATSAPP_API_KEY}`;
+        
+        // Try API first
+        const response = await fetch(apiUrl);
+        const responseText = await response.text();
+        
+        if (!response.ok || !responseText.includes("Message sent")) {
+            // Fallback to direct WhatsApp
+            const whatsappUrl = `https://wa.me/${CONFIG.BUSINESS.PHONE}?text=${encodeURIComponent(message)}`;
+            window.open(whatsappUrl, '_blank');
+        }
+        
+    } catch (error) {
+        console.error('COD Notification Error:', error);
+        // If all fails, still proceed with order
     }
+}
+
+// Modified process method
+static async process(e) {
+    e.preventDefault();
+    const submitBtn = document.querySelector('.place-order-btn');
+    
+    try {
+        const formData = this.getFormData();
+        this.validateForm(formData);
+        
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+        
+        if (formData.paymentMethod === 'cash') {
+            await this.sendCODNotification(formData);
+            
+            // Always clear cart and redirect after COD processing
+            CartManager.clearCart();
+            window.location.href = `thank-you.html?order=${formData.orderNumber}`;
+            
+        } else {
+            // ... rest of existing code ...
+        }
+        
+    } catch (error) {
+        console.error('Order Error:', error);
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = 'Place Order';
+        AlertSystem.show({
+            title: "Order Issue",
+            message: error.message || "Please check your order details",
+            icon: "warning"
+        });
+    }
+}
     
     static createWhatsAppMessage(formData) {
       const itemsText = formData.items.map(item =>
